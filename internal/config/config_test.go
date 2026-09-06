@@ -95,6 +95,20 @@ func TestLoad(t *testing.T) {
 			wantErr: "CHARITY_URL must be an absolute URL",
 		},
 		{
+			name: "fake chain needs no keypair",
+			env: func() map[string]string {
+				m := full()
+				delete(m, "SOLANA_KEYPAIR")
+				m["FAKE_CHAIN"] = "1"
+				return m
+			}(),
+			check: func(t *testing.T, c Config) {
+				if !c.FakeChain || c.SolanaKeypair != "" {
+					t.Errorf("fake chain config = %+v", c)
+				}
+			},
+		},
+		{
 			name:    "every missing value is reported at once",
 			env:     map[string]string{},
 			wantErr: "PLEDGER_NAME is not set",

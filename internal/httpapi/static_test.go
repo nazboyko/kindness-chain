@@ -10,7 +10,7 @@ import (
 
 func TestStatic(t *testing.T) {
 	dist := fstest.MapFS{
-		"index.html":        {Data: []byte("<html>index</html>")},
+		"index.html":         {Data: []byte("<html>index</html>")},
 		"assets/app-1a2b.js": {Data: []byte("console.log(1)")},
 	}
 	handler := Static(dist)

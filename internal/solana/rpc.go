@@ -105,7 +105,7 @@ func (c *RPC) waitConfirmed(ctx context.Context, sig solanago.Signature, lastVal
 			seen = true
 			status := statuses.Value[0]
 			if status.Err != nil {
-				return fmt.Errorf("transaction %s failed on-chain: %v", sig, status.Err)
+				return fmt.Errorf("%w: %s: %v", ErrRejected, sig, status.Err)
 			}
 			switch status.ConfirmationStatus {
 			case rpc.ConfirmationStatusConfirmed, rpc.ConfirmationStatusFinalized:

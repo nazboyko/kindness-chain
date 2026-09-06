@@ -26,6 +26,9 @@ var (
 	// ErrNotFound is returned by GetMemo when the cluster does not know
 	// the signature.
 	ErrNotFound = errors.New("transaction not found")
+	// ErrRejected means the cluster ran the transaction and refused it.
+	// Sending the same memo again would only be refused again.
+	ErrRejected = errors.New("transaction rejected on-chain")
 	// ErrExpired means the transaction was never seen before its
 	// blockhash stopped being valid. It can never land, so a retry with
 	// a fresh blockhash is safe.

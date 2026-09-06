@@ -18,6 +18,7 @@ type Config struct {
 	SolanaRPCURL       string
 	SolanaKeypair      string // the JSON byte array from a solana-keygen file
 	SolanaCluster      string
+	FakeChain          bool // confirm links in memory instead of on Solana; for frontend work only
 	PledgePerLinkCents int
 	PledgeCapCents     int
 	CharityName        string
@@ -66,8 +67,9 @@ func load(getenv func(string) string) (Config, error) {
 		Port:               optional("PORT", "8080"),
 		DBPath:             optional("DB_PATH", "chain.db"),
 		SolanaRPCURL:       optional("SOLANA_RPC_URL", "https://api.devnet.solana.com"),
-		SolanaKeypair:      required("SOLANA_KEYPAIR"),
+		SolanaKeypair:      optional("SOLANA_KEYPAIR", ""),
 		SolanaCluster:      optional("SOLANA_CLUSTER", "devnet"),
+		FakeChain:          isTrue(getenv("FAKE_CHAIN")),
 		PledgePerLinkCents: positive("PLEDGE_PER_LINK_CENTS", 10),
 		PledgeCapCents:     positive("PLEDGE_CAP_CENTS", 5000),
 		CharityName:        required("CHARITY_NAME"),
@@ -79,7 +81,12 @@ func load(getenv func(string) string) (Config, error) {
 	if _, err := strconv.Atoi(cfg.Port); err != nil {
 		errs = append(errs, fmt.Errorf("PORT must be a number, got %q", cfg.Port))
 	}
-	if cfg.SolanaKeypair != "" && !strings.HasPrefix(cfg.SolanaKeypair, "[") {
+	switch {
+	case cfg.FakeChain:
+		// the fake signs nothing
+	case cfg.SolanaKeypair == "":
+		errs = append(errs, errors.New("SOLANA_KEYPAIR is not set"))
+	case !strings.HasPrefix(cfg.SolanaKeypair, "["):
 		errs = append(errs, errors.New("SOLANA_KEYPAIR must be the JSON byte array from solana-keygen, starting with ["))
 	}
 	if cfg.CharityURL != "" && !absoluteURL(cfg.CharityURL) {
@@ -95,4 +102,12 @@ func load(getenv func(string) string) (Config, error) {
 func absoluteURL(raw string) bool {
 	u, err := url.Parse(raw)
 	return err == nil && u.Scheme != "" && u.Host != ""
+}
+
+func isTrue(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "1", "true", "yes":
+		return true
+	}
+	return false
 }
