@@ -1,4 +1,4 @@
-.PHONY: dev run build-web build test
+.PHONY: dev run build-web build test image deploy
 
 # Frontend dev server on :5173. It proxies /api to the Go server from `make run`.
 dev:
@@ -21,3 +21,10 @@ build: build-web
 
 test:
 	go vet ./... && go test ./...
+
+# The same image Fly builds, for a local check before a deploy.
+image:
+	docker build -t kindness-chain .
+
+deploy:
+	fly deploy

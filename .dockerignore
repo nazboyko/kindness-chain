@@ -1,0 +1,14 @@
+# The build context is an allowlist: only what the two builds read.
+*
+!go.mod
+!go.sum
+!cmd
+!internal
+!web/embed.go
+!web/package.json
+!web/package-lock.json
+!web/index.html
+!web/vite.config.ts
+!web/tsconfig.json
+!web/src
+!web/public
