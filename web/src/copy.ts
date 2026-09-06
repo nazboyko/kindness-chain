@@ -7,10 +7,11 @@ export const copy = {
   namePlaceholder: "I carried my neighbour's groceries up three floors.",
   nameLabel: "Your name (optional)",
   button: "Add my link",
-  tooShort: "Write at least 10 characters — one honest sentence is enough.",
-  tooLong: "Keep it to 200 characters — one sentence is enough.",
+  tooShort: "Write at least 10 characters. One honest sentence is enough.",
+  tooLong: "Keep it to 200 characters. One sentence is enough.",
   offline: "Could not reach the server. Check your connection and try again.",
-  added: (n: number) => `Link #${n} added — confirming on-chain…`,
+  sealing: "Sealing your link…",
+  added: (n: number) => `Link #${n} added. Confirming on-chain…`,
   confirmed: (n: number) => `Link #${n} confirmed.`,
   verifyOnExplorer: "Verify it on Solana Explorer.",
   failed: (n: number) => `Link #${n} could not be written to the chain. Try again in a minute.`,
@@ -40,8 +41,8 @@ export const limits = { minAct: 10, maxAct: 200, maxName: 40 };
 
 // shareOpening is the sentence that goes out with a link's address.
 export function shareOpening(n: number, mine: boolean): string {
-  const opening = mine ? `I just added link #${n} to the Kindness Chain` : `Link #${n} on the Kindness Chain`;
-  return `${opening} — every sentence becomes a dime for refugees in Minnesota. Add yours:`;
+  const opening = mine ? `I just added link #${n} to the Kindness Chain.` : `Link #${n} on the Kindness Chain.`;
+  return `${opening} Every sentence becomes a dime for refugees in Minnesota. Add yours:`;
 }
 
 export function linkAddress(n: number): string {

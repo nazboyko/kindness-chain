@@ -11,11 +11,12 @@ import (
 
 const linkColumns = `n, act, author, created_at, status, signature, prev_signature, memo, confirmed_at, error`
 
-// Insert adds a pending link and returns its number.
-func (s *Store) Insert(ctx context.Context, act, by string, createdAt time.Time) (int64, error) {
+// Insert adds a pending link and returns its number. The fingerprint
+// is what duplicate checks compare.
+func (s *Store) Insert(ctx context.Context, act, by, fingerprint string, createdAt time.Time) (int64, error) {
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO links (act, author, created_at, status) VALUES (?, ?, ?, ?)`,
-		act, by, formatTime(createdAt), StatusPending,
+		`INSERT INTO links (act, author, fingerprint, created_at, status) VALUES (?, ?, ?, ?, ?)`,
+		act, by, fingerprint, formatTime(createdAt), StatusPending,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("insert link: %w", err)
@@ -29,11 +30,11 @@ func (s *Store) Insert(ctx context.Context, act, by string, createdAt time.Time)
 
 // InsertGenesis writes link #0 if the table is empty, and reports
 // whether it did.
-func (s *Store) InsertGenesis(ctx context.Context, act, by string, createdAt time.Time) (bool, error) {
+func (s *Store) InsertGenesis(ctx context.Context, act, by, fingerprint string, createdAt time.Time) (bool, error) {
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO links (n, act, author, created_at, status)
-		 SELECT 0, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM links)`,
-		act, by, formatTime(createdAt), StatusPending,
+		`INSERT INTO links (n, act, author, fingerprint, created_at, status)
+		 SELECT 0, ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM links)`,
+		act, by, fingerprint, formatTime(createdAt), StatusPending,
 	)
 	if err != nil {
 		return false, fmt.Errorf("insert genesis: %w", err)
@@ -145,6 +146,49 @@ func (s *Store) PendingInOrder(ctx context.Context) ([]int64, error) {
 		ns = append(ns, n)
 	}
 	return ns, rows.Err()
+}
+
+// SeenSince reports whether a link with this fingerprint was added at
+// or after since and is on the chain or on its way there.
+func (s *Store) SeenSince(ctx context.Context, fingerprint string, since time.Time) (bool, error) {
+	var n int64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT n FROM links WHERE fingerprint = ? AND created_at >= ? AND status != ? LIMIT 1`,
+		fingerprint, formatTime(since), StatusFailed,
+	).Scan(&n)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("duplicate check: %w", err)
+	}
+	return true, nil
+}
+
+// WithoutFingerprint lists links from before fingerprints existed.
+func (s *Store) WithoutFingerprint(ctx context.Context) ([]Link, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT `+linkColumns+` FROM links WHERE fingerprint = '' ORDER BY n`)
+	if err != nil {
+		return nil, fmt.Errorf("links without fingerprint: %w", err)
+	}
+	defer rows.Close()
+	links := []Link{}
+	for rows.Next() {
+		link, err := scanLink(rows)
+		if err != nil {
+			return nil, fmt.Errorf("links without fingerprint: %w", err)
+		}
+		links = append(links, link)
+	}
+	return links, rows.Err()
+}
+
+// SetFingerprint fills in the fingerprint of an older link.
+func (s *Store) SetFingerprint(ctx context.Context, n int64, fingerprint string) error {
+	if _, err := s.db.ExecContext(ctx, `UPDATE links SET fingerprint = ? WHERE n = ?`, fingerprint, n); err != nil {
+		return fmt.Errorf("set fingerprint: %w", err)
+	}
+	return nil
 }
 
 // Counts tallies links by state.

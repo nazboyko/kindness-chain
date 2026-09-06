@@ -55,7 +55,7 @@ type Store struct {
 	db *sql.DB
 }
 
-const schema = `
+const createTable = `
 CREATE TABLE IF NOT EXISTS links (
 	n              INTEGER PRIMARY KEY,
 	act            TEXT NOT NULL,
@@ -66,9 +66,14 @@ CREATE TABLE IF NOT EXISTS links (
 	prev_signature TEXT,
 	memo           TEXT,
 	confirmed_at   TEXT,
-	error          TEXT
+	error          TEXT,
+	fingerprint    TEXT NOT NULL DEFAULT ''
 );
+`
+
+const createIndexes = `
 CREATE INDEX IF NOT EXISTS links_by_status ON links (status, n);
+CREATE INDEX IF NOT EXISTS links_by_fingerprint ON links (fingerprint, created_at);
 `
 
 // Open opens or creates the database at path and applies the schema.
@@ -78,11 +83,51 @@ func Open(path string) (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open %s: %w", path, err)
 	}
-	if _, err := db.Exec(schema); err != nil {
+	if err := migrate(db); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("apply schema: %w", err)
+		return nil, err
 	}
 	return &Store{db: db}, nil
+}
+
+// migrate creates the table for a new database and brings an older one
+// up to date. The fingerprint column arrived after the first deploy, so
+// a database from before it gets the column added in place.
+func migrate(db *sql.DB) error {
+	if _, err := db.Exec(createTable); err != nil {
+		return fmt.Errorf("create table: %w", err)
+	}
+	has, err := hasColumn(db, "links", "fingerprint")
+	if err != nil {
+		return err
+	}
+	if !has {
+		if _, err := db.Exec(`ALTER TABLE links ADD COLUMN fingerprint TEXT NOT NULL DEFAULT ''`); err != nil {
+			return fmt.Errorf("add fingerprint column: %w", err)
+		}
+	}
+	if _, err := db.Exec(createIndexes); err != nil {
+		return fmt.Errorf("create indexes: %w", err)
+	}
+	return nil
+}
+
+func hasColumn(db *sql.DB, table, column string) (bool, error) {
+	rows, err := db.Query(`SELECT name FROM pragma_table_info(?)`, table)
+	if err != nil {
+		return false, fmt.Errorf("inspect %s: %w", table, err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return false, err
+		}
+		if name == column {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
 }
 
 // Close releases the database.

@@ -60,7 +60,12 @@ func (NopBroadcaster) StatsChanged(Stats) {}
 // ErrBusy is returned when too many links are already waiting.
 var ErrBusy = errors.New("too many links are waiting for the chain, try again in a minute")
 
-const queueSize = 1000
+const (
+	queueSize = 1000
+	// duplicateWindow is how long the same sentence is refused after it
+	// was added once.
+	duplicateWindow = 24 * time.Hour
+)
 
 // Service is the one place links are created and confirmed.
 type Service struct {
@@ -96,12 +101,26 @@ func New(cfg Config, st *store.Store, ledger solana.Client, events Broadcaster) 
 // Start writes the pledge as link #0 when the store is empty and queues
 // every link an earlier run left pending, so a restart loses nothing.
 func (s *Service) Start(ctx context.Context) error {
-	wrote, err := s.store.InsertGenesis(ctx, GenesisText(s.cfg), s.cfg.PledgerName, now())
+	pledge := GenesisText(s.cfg)
+	wrote, err := s.store.InsertGenesis(ctx, pledge, s.cfg.PledgerName, Fingerprint(pledge), now())
 	if err != nil {
 		return err
 	}
 	if wrote {
 		s.log.Printf("wrote the pledge as link #0")
+	}
+	// links from before duplicate checks existed get their fingerprint now
+	older, err := s.store.WithoutFingerprint(ctx)
+	if err != nil {
+		return err
+	}
+	for _, link := range older {
+		if err := s.store.SetFingerprint(ctx, link.N, Fingerprint(link.Act)); err != nil {
+			return err
+		}
+	}
+	if len(older) > 0 {
+		s.log.Printf("fingerprinted %d older links", len(older))
 	}
 	pending, err := s.store.PendingInOrder(ctx)
 	if err != nil {
@@ -132,10 +151,17 @@ func (s *Service) Add(ctx context.Context, act, by string) (Link, error) {
 	if err := fitsOnChain(act, by, createdAt); err != nil {
 		return Link{}, err
 	}
+	duplicate, err := s.Duplicate(ctx, act)
+	if err != nil {
+		return Link{}, err
+	}
+	if duplicate {
+		return Link{}, refuse(MsgDuplicate)
+	}
 	if len(s.queue) >= cap(s.queue) {
 		return Link{}, ErrBusy
 	}
-	n, err := s.store.Insert(ctx, act, by, createdAt)
+	n, err := s.store.Insert(ctx, act, by, Fingerprint(act), createdAt)
 	if err != nil {
 		return Link{}, fmt.Errorf("store link: %w", err)
 	}
@@ -147,6 +173,16 @@ func (s *Service) Add(ctx context.Context, act, by string) (Link, error) {
 		s.log.Printf("queue full, link %d waits for the next start", n)
 	}
 	return Link{N: n, Act: act, By: by, CreatedAt: createdAt, Status: store.StatusPending}, nil
+}
+
+// Duplicate reports whether the same sentence, give or take punctuation
+// and case, was added within the last day.
+func (s *Service) Duplicate(ctx context.Context, act string) (bool, error) {
+	seen, err := s.store.SeenSince(ctx, Fingerprint(act), now().Add(-duplicateWindow))
+	if err != nil {
+		return false, fmt.Errorf("duplicate check: %w", err)
+	}
+	return seen, nil
 }
 
 // Get returns one link.

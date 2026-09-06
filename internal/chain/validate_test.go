@@ -48,3 +48,18 @@ func TestValidate(t *testing.T) {
 		})
 	}
 }
+
+func TestFingerprint(t *testing.T) {
+	cases := map[string]string{
+		"I called my grandmother today!":        "i called my grandmother today",
+		"  i called MY grandmother, today ":     "i called my grandmother today",
+		"I called... my  grandmother — today?!": "i called my grandmother today",
+		"$5 for a neighbour's coffee":           "5 for a neighbours coffee",
+		"Я подзвонив бабусі.":                   "я подзвонив бабусі",
+	}
+	for in, want := range cases {
+		if got := Fingerprint(in); got != want {
+			t.Errorf("Fingerprint(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

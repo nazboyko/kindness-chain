@@ -61,7 +61,7 @@ export function Counter({ stats }: { stats: Stats | null }) {
               <dt>Chain head</dt>
               <dd>
                 <a href={stats.head.explorerUrl} className={external} target="_blank" rel="noopener noreferrer">
-                  #{stats.head.n} · {shortSignature(stats.head.signature)}
+                  #{stats.head.n} · {shortSignature(stats.head.signature)} ↗
                 </a>
               </dd>
             </div>
@@ -71,7 +71,7 @@ export function Counter({ stats }: { stats: Stats | null }) {
               <dt>Signer</dt>
               <dd>
                 <a href={stats.signer.explorerUrl} className={external} target="_blank" rel="noopener noreferrer">
-                  {shortSignature(stats.signer.address)}
+                  {shortSignature(stats.signer.address)} ↗
                 </a>
               </dd>
             </div>
@@ -90,8 +90,8 @@ export function Counter({ stats }: { stats: Stats | null }) {
         <ol className="mt-3 list-decimal space-y-2 pl-5 text-ink-2">
           <li>You add one sentence. No signup, no wallet.</li>
           <li>
-            Each link is written to Solana {stats.cluster} as a memo that references the previous link — the chain is
-            public and verifiable.
+            Each link is written to Solana {stats.cluster} as a memo that references the previous link, so the chain
+            is public and verifiable.
           </li>
           <li>
             For every confirmed link I donate {money(stats.perLinkCents)} to the {stats.charity.name}, up to{" "}

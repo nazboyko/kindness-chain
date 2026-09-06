@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"path/filepath"
 	"testing"
@@ -24,16 +25,16 @@ func TestGenesisAndInsert(t *testing.T) {
 	ctx := context.Background()
 	s := open(t)
 
-	wrote, err := s.InsertGenesis(ctx, "the pledge", "Nazar", day)
+	wrote, err := s.InsertGenesis(ctx, "the pledge", "Nazar", "the pledge", day)
 	if err != nil || !wrote {
 		t.Fatalf("first genesis: wrote=%v err=%v", wrote, err)
 	}
-	wrote, err = s.InsertGenesis(ctx, "the pledge again", "Nazar", day)
+	wrote, err = s.InsertGenesis(ctx, "the pledge again", "Nazar", "the pledge again", day)
 	if err != nil || wrote {
 		t.Fatalf("second genesis: wrote=%v err=%v", wrote, err)
 	}
 
-	n, err := s.Insert(ctx, "I carried groceries for a neighbour", "Olena", day.Add(time.Minute))
+	n, err := s.Insert(ctx, "I carried groceries for a neighbour", "Olena", "i carried groceries for a neighbour", day.Add(time.Minute))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +61,7 @@ func TestStatusTransitions(t *testing.T) {
 	ctx := context.Background()
 	s := open(t)
 	for i := range 3 {
-		if _, err := s.Insert(ctx, "act", "", day.Add(time.Duration(i)*time.Second)); err != nil {
+		if _, err := s.Insert(ctx, "act", "", "act", day.Add(time.Duration(i)*time.Second)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -100,7 +101,7 @@ func TestStatusTransitions(t *testing.T) {
 func TestGenesisDoesNotCountTowardThePledge(t *testing.T) {
 	ctx := context.Background()
 	s := open(t)
-	if _, err := s.InsertGenesis(ctx, "pledge", "Nazar", day); err != nil {
+	if _, err := s.InsertGenesis(ctx, "pledge", "Nazar", "pledge", day); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.MarkConfirmed(ctx, 0, "sig0", "genesis", "{}", day); err != nil {
@@ -116,7 +117,7 @@ func TestListDesc(t *testing.T) {
 	ctx := context.Background()
 	s := open(t)
 	for i := range 5 {
-		if _, err := s.Insert(ctx, "act", "", day.Add(time.Duration(i)*time.Second)); err != nil {
+		if _, err := s.Insert(ctx, "act", "", "act", day.Add(time.Duration(i)*time.Second)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -150,5 +151,66 @@ func TestListDesc(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestSeenSince(t *testing.T) {
+	ctx := context.Background()
+	s := open(t)
+	if _, err := s.Insert(ctx, "I called my grandmother.", "", "i called my grandmother", day); err != nil {
+		t.Fatal(err)
+	}
+	if seen, _ := s.SeenSince(ctx, "i called my grandmother", day.Add(-time.Hour)); !seen {
+		t.Error("a fresh duplicate was not seen")
+	}
+	if seen, _ := s.SeenSince(ctx, "i called my grandmother", day.Add(time.Hour)); seen {
+		t.Error("an old link counted as recent")
+	}
+	if seen, _ := s.SeenSince(ctx, "something else", day.Add(-time.Hour)); seen {
+		t.Error("a different fingerprint matched")
+	}
+	if err := s.MarkFailed(ctx, 1, "rejected"); err != nil {
+		t.Fatal(err)
+	}
+	if seen, _ := s.SeenSince(ctx, "i called my grandmother", day.Add(-time.Hour)); seen {
+		t.Error("a failed link still blocks a retry")
+	}
+}
+
+func TestMigrationAddsFingerprint(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "old.db")
+	old, err := sql.Open("sqlite", "file:"+path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// the table as the first deploy created it, without the column
+	_, err = old.Exec(`CREATE TABLE links (
+		n INTEGER PRIMARY KEY, act TEXT NOT NULL, author TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL,
+		status TEXT NOT NULL CHECK (status IN ('pending', 'confirmed', 'failed')),
+		signature TEXT, prev_signature TEXT, memo TEXT, confirmed_at TEXT, error TEXT);
+		INSERT INTO links (n, act, created_at, status) VALUES (0, 'the pledge', '2026-09-06T00:00:00Z', 'confirmed')`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old.Close()
+
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("open an older database: %v", err)
+	}
+	defer s.Close()
+	missing, err := s.WithoutFingerprint(ctx)
+	if err != nil || len(missing) != 1 || missing[0].N != 0 {
+		t.Fatalf("links without fingerprint = %v err=%v", missing, err)
+	}
+	if err := s.SetFingerprint(ctx, 0, "the pledge"); err != nil {
+		t.Fatal(err)
+	}
+	if seen, _ := s.SeenSince(ctx, "the pledge", day.Add(-24*time.Hour)); !seen {
+		t.Error("the backfilled fingerprint is not found")
+	}
+	if _, err := s.Insert(ctx, "new", "", "new", day); err != nil {
+		t.Errorf("insert after migration: %v", err)
 	}
 }

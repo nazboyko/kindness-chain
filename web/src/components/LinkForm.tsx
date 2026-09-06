@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { api, ApiError, type Link } from "../api";
 import { copy, limits } from "../copy";
 import { characters } from "../format";
+import { seal } from "../pow";
 
 interface Props {
   mine: Link | null;
@@ -57,7 +58,7 @@ export function LinkForm({ mine, onSubmitted }: Props) {
     }
     setBusy(true);
     try {
-      const link = await api.add(act, by, website);
+      const link = await sealAndSend();
       onSubmitted(link);
       setMessage({ tone: "info", text: copy.added(link.n) });
       setAct("");
@@ -67,6 +68,18 @@ export function LinkForm({ mine, onSubmitted }: Props) {
       setMessage({ tone: "error", text: err instanceof ApiError ? err.message : copy.offline });
     } finally {
       setBusy(false);
+    }
+  }
+
+  // the seal is computed in the browser; if the server has forgotten the
+  // seed by the time it arrives, one fresh attempt is made quietly
+  async function sealAndSend() {
+    setMessage({ tone: "info", text: copy.sealing });
+    try {
+      return await api.add(act, by, website, await seal(act));
+    } catch (err) {
+      if (!(err instanceof ApiError && err.reason === "challenge")) throw err;
+      return await api.add(act, by, website, await seal(act));
     }
   }
 

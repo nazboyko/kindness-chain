@@ -146,11 +146,11 @@ func TestLinksAreConfirmedInOrderAndChained(t *testing.T) {
 func TestRestartPicksUpPendingLinks(t *testing.T) {
 	ctx := context.Background()
 	st := openStore(t)
-	if _, err := st.InsertGenesis(ctx, "pledge text for the test", "Nazar", now()); err != nil {
+	if _, err := st.InsertGenesis(ctx, "pledge text for the test", "Nazar", "pledge text for the test", now()); err != nil {
 		t.Fatal(err)
 	}
 	for _, act := range []string{"first pending sentence", "second pending sentence"} {
-		if _, err := st.Insert(ctx, act, "", now()); err != nil {
+		if _, err := st.Insert(ctx, act, "", Fingerprint(act), now()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -241,5 +241,53 @@ func TestAddRefusesBadInput(t *testing.T) {
 	var verr *ValidationError
 	if !errors.As(err, &verr) || verr.Message != MsgTooShort {
 		t.Errorf("error = %v, want %q", err, MsgTooShort)
+	}
+}
+
+func TestDuplicateSentencesAreRefusedForADay(t *testing.T) {
+	ctx := context.Background()
+	st := openStore(t)
+	svc, _ := newService(t, st, solana.NewFake())
+
+	if _, err := svc.Add(ctx, "I called my grandmother today!", "Olena"); err != nil {
+		t.Fatal(err)
+	}
+	_, err := svc.Add(ctx, "  i called MY grandmother, today ", "")
+	var verr *ValidationError
+	if !errors.As(err, &verr) || verr.Message != MsgDuplicate {
+		t.Fatalf("second copy: %v, want %q", err, MsgDuplicate)
+	}
+	if _, err := svc.Add(ctx, "I called my grandmother yesterday.", ""); err != nil {
+		t.Errorf("a different sentence was refused: %v", err)
+	}
+
+	// the same sentence from two days ago no longer counts
+	old := "I watered the plants for a travelling friend."
+	if _, err := st.Insert(ctx, old, "", Fingerprint(old), now().Add(-48*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Add(ctx, old, ""); err != nil {
+		t.Errorf("an old sentence was refused: %v", err)
+	}
+}
+
+func TestStartFingerprintsOlderLinks(t *testing.T) {
+	ctx := context.Background()
+	st := openStore(t)
+	if _, err := st.InsertGenesis(ctx, "the pledge", "Nazar", "", now()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.Insert(ctx, "An older sentence, kept.", "", "", now()); err != nil {
+		t.Fatal(err)
+	}
+	svc, _ := newService(t, st, solana.NewFake())
+	if err := svc.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if missing, _ := st.WithoutFingerprint(ctx); len(missing) != 0 {
+		t.Errorf("still without fingerprint: %v", missing)
+	}
+	if dup, _ := svc.Duplicate(ctx, "an older sentence kept"); !dup {
+		t.Error("the backfilled fingerprint does not match")
 	}
 }

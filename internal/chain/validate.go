@@ -17,12 +17,13 @@ const (
 // The refusals, worded for the visitor. The frontend repeats the length
 // ones so it can answer before a request is made.
 const (
-	MsgTooShort      = "Write at least 10 characters — one honest sentence is enough."
-	MsgTooLong       = "Keep it to 200 characters — one sentence is enough."
+	MsgTooShort      = "Write at least 10 characters. One honest sentence is enough."
+	MsgTooLong       = "Keep it to 200 characters. One sentence is enough."
 	MsgNameTooLong   = "Keep your name to 40 characters."
-	MsgNoLinks       = "Links are not allowed here — just the sentence."
+	MsgNoLinks       = "Links are not allowed here, just the sentence."
 	MsgBlockedWord   = "That word is not welcome here. Try another sentence."
 	MsgTooBigOnChain = "That sentence is too long to fit on-chain in one memo. Try fewer characters."
+	MsgDuplicate     = "This sentence is already in the chain."
 )
 
 // ValidationError explains, in the visitor's words, why a submission
@@ -70,6 +71,29 @@ func Normalize(s string) string {
 			pendingSpace = true
 		case unicode.IsControl(r), unicode.Is(unicode.Cf, r), r == utf8.RuneError:
 			// nothing a person meant to write
+		default:
+			if pendingSpace && b.Len() > 0 {
+				b.WriteByte(' ')
+			}
+			pendingSpace = false
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// Fingerprint reduces a sentence to what a duplicate check compares:
+// lowercase, no punctuation or symbols, single spaces. Two sentences
+// that differ only in those ways are the same sentence.
+func Fingerprint(act string) string {
+	var b strings.Builder
+	pendingSpace := false
+	for _, r := range strings.ToLower(Normalize(act)) {
+		switch {
+		case unicode.IsSpace(r):
+			pendingSpace = true
+		case unicode.IsPunct(r), unicode.IsSymbol(r):
+			// punctuation does not make a different sentence
 		default:
 			if pendingSpace && b.Len() > 0 {
 				b.WriteByte(' ')

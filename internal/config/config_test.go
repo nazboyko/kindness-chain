@@ -31,6 +31,9 @@ func TestLoad(t *testing.T) {
 				if c.SolanaCluster != "devnet" || c.SolanaRPCURL != "https://api.devnet.solana.com" {
 					t.Errorf("solana defaults not applied: %+v", c)
 				}
+				if c.GlobalPerMinute != 10 || c.PowBits != 18 {
+					t.Errorf("abuse defaults not applied: %+v", c)
+				}
 			},
 		},
 		{
@@ -93,6 +96,28 @@ func TestLoad(t *testing.T) {
 				return m
 			}(),
 			wantErr: "CHARITY_URL must be an absolute URL",
+		},
+		{
+			name: "proof of work can be turned off",
+			env: func() map[string]string {
+				m := full()
+				m["POW_BITS"] = "0"
+				return m
+			}(),
+			check: func(t *testing.T, c Config) {
+				if c.PowBits != 0 {
+					t.Errorf("PowBits = %d, want 0", c.PowBits)
+				}
+			},
+		},
+		{
+			name: "proof of work bits out of range",
+			env: func() map[string]string {
+				m := full()
+				m["POW_BITS"] = "40"
+				return m
+			}(),
+			wantErr: "POW_BITS must be a whole number from 0 to 32",
 		},
 		{
 			name: "fake chain needs no keypair",

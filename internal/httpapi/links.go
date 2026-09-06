@@ -71,8 +71,15 @@ type submission struct {
 	Act     string `json:"act"`
 	By      string `json:"by"`
 	Website string `json:"website"` // the honeypot: people never see this field
+	Seed    string `json:"seed"`    // the proof-of-work challenge, when it is on
+	Nonce   string `json:"nonce"`
 }
 
+// handleAdd runs the gates in order of how cheap and how personal they
+// are: the honeypot, the sentence itself, the proof of work, the
+// duplicate check, then the two rate limits. A sentence is refused for
+// its own faults before any limit is charged, so a typo never costs a
+// visitor one of their links for the hour.
 func (a *API) handleAdd(w http.ResponseWriter, r *http.Request) {
 	var in submission
 	body := http.MaxBytesReader(w, r.Body, maxBodyBytes)
@@ -80,27 +87,46 @@ func (a *API) handleAdd(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "send JSON with act and an optional by")
 		return
 	}
-
 	if in.Website != "" {
 		a.pretendToAccept(w, r, in)
 		return
 	}
-
-	// a typo must not cost a visitor one of their few links per hour,
-	// so the sentence is checked before the limit is charged
 	if _, _, err := chain.Validate(in.Act, in.By); err != nil {
 		a.refuse(w, err)
 		return
 	}
-	if ok, retryAfter := a.limiter.Allow(clientIP(r)); !ok {
-		minutes := int(math.Ceil(retryAfter.Minutes()))
-		w.Header().Set("Retry-After", strconv.Itoa(int(math.Ceil(retryAfter.Seconds()))))
-		writeJSON(w, http.StatusTooManyRequests, map[string]any{
-			"error":             fmt.Sprintf("You've added %d links this hour. Come back in %d minutes — kindness keeps.", a.cfg.RateLimitPerHour, minutes),
-			"retryAfterSeconds": int(math.Ceil(retryAfter.Seconds())),
-		})
+	if a.challenges != nil {
+		if err := a.challenges.Redeem(in.Seed, in.Nonce, in.Act); err != nil {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]any{
+				"error":  "This link's seal is missing or expired. Try again.",
+				"reason": "challenge",
+			})
+			return
+		}
+	}
+	if duplicate, err := a.chain.Duplicate(r.Context(), in.Act); err != nil {
+		a.serverError(w, "duplicate check", err)
+		return
+	} else if duplicate {
+		writeError(w, http.StatusUnprocessableEntity, chain.MsgDuplicate)
 		return
 	}
+
+	ip := clientIP(r)
+	if ok, wait := a.perIP.Peek(ip); !ok {
+		minutes := int(math.Ceil(wait.Minutes()))
+		a.tooMany(w, wait, fmt.Sprintf(
+			"You've added %d links this hour. Come back in %d minutes. Kindness keeps.",
+			a.cfg.RateLimitPerHour, minutes,
+		))
+		return
+	}
+	if ok, wait := a.global.Peek("chain"); !ok {
+		a.tooMany(w, wait, "The chain is busy right now, try again in a minute")
+		return
+	}
+	a.perIP.Allow(ip)
+	a.global.Allow("chain")
 
 	link, err := a.chain.Add(r.Context(), in.Act, in.By)
 	if err != nil {
@@ -108,6 +134,31 @@ func (a *API) handleAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusAccepted, toLinkJSON(link, a.cfg.Cluster))
+}
+
+func (a *API) tooMany(w http.ResponseWriter, wait time.Duration, message string) {
+	seconds := int(math.Ceil(wait.Seconds()))
+	w.Header().Set("Retry-After", strconv.Itoa(seconds))
+	writeJSON(w, http.StatusTooManyRequests, map[string]any{
+		"error":             message,
+		"retryAfterSeconds": seconds,
+	})
+}
+
+// handleChallenge hands out a proof-of-work seed. With proof of work
+// off it says so with a difficulty of zero, and browsers send nothing.
+func (a *API) handleChallenge(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	if a.challenges == nil {
+		writeJSON(w, http.StatusOK, Challenge{Difficulty: 0, Expires: time.Now().Add(challengeTTL)})
+		return
+	}
+	challenge, err := a.challenges.Issue()
+	if err != nil {
+		a.serverError(w, "issue challenge", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, challenge)
 }
 
 // pretendToAccept answers a bot that filled the hidden field the way a

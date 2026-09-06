@@ -16,6 +16,7 @@ import (
 // Chain is what the handlers need from the chain service.
 type Chain interface {
 	Add(ctx context.Context, act, by string) (chain.Link, error)
+	Duplicate(ctx context.Context, act string) (bool, error)
 	Get(ctx context.Context, n int64) (chain.Link, error)
 	List(ctx context.Context, before int64, limit int) ([]chain.Link, error)
 	Stats(ctx context.Context) (chain.Stats, error)
@@ -24,32 +25,44 @@ type Chain interface {
 // Config is what the API needs to know about its surroundings.
 type Config struct {
 	Cluster          string // names the cluster in explorer links
-	RateLimitPerHour int
+	RateLimitPerHour int    // links one address may add per hour
+	GlobalPerMinute  int    // links the whole chain accepts per minute
+	PowBits          int    // proof-of-work difficulty; 0 turns it off
 }
+
+// challengeTTL is how long a proof-of-work seed stays valid.
+const challengeTTL = 10 * time.Minute
 
 // API holds the handlers and what they depend on.
 type API struct {
-	cfg     Config
-	chain   Chain
-	ledger  solana.Client
-	hub     *Hub
-	limiter *Limiter
-	dist    fs.FS
-	log     *log.Logger
+	cfg        Config
+	chain      Chain
+	ledger     solana.Client
+	hub        *Hub
+	perIP      *Limiter
+	global     *Limiter
+	challenges *Challenges // nil when proof of work is off
+	dist       fs.FS
+	log        *log.Logger
 }
 
 // New wires the API. The hub is created separately because the chain
 // service needs it before the API exists.
 func New(cfg Config, service Chain, ledger solana.Client, hub *Hub, dist fs.FS) *API {
-	return &API{
-		cfg:     cfg,
-		chain:   service,
-		ledger:  ledger,
-		hub:     hub,
-		limiter: NewLimiter(cfg.RateLimitPerHour, time.Hour),
-		dist:    dist,
-		log:     log.Default(),
+	api := &API{
+		cfg:    cfg,
+		chain:  service,
+		ledger: ledger,
+		hub:    hub,
+		perIP:  NewLimiter(cfg.RateLimitPerHour, time.Hour),
+		global: NewLimiter(cfg.GlobalPerMinute, time.Minute),
+		dist:   dist,
+		log:    log.Default(),
 	}
+	if cfg.PowBits > 0 {
+		api.challenges = NewChallenges(cfg.PowBits, challengeTTL)
+	}
+	return api
 }
 
 // Handler routes everything: the API, the event stream, health, and the
@@ -60,6 +73,7 @@ func (a *API) Handler() http.Handler {
 	mux.HandleFunc("GET /api/links", a.handleList)
 	mux.HandleFunc("GET /api/links/{n}", a.handleGet)
 	mux.HandleFunc("POST /api/links", a.handleAdd)
+	mux.HandleFunc("GET /api/challenge", a.handleChallenge)
 	mux.HandleFunc("GET /api/verify/{n}", a.handleVerify)
 	mux.HandleFunc("GET /api/events", a.handleEvents)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {

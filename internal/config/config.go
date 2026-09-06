@@ -25,6 +25,8 @@ type Config struct {
 	CharityURL         string
 	PledgerName        string
 	RateLimitPerHour   int
+	GlobalPerMinute    int // links accepted chain-wide per minute
+	PowBits            int // leading zero bits a submission's proof of work must show; 0 turns it off
 }
 
 // Load reads the environment. Defaults exist only for values that are
@@ -63,6 +65,19 @@ func load(getenv func(string) string) (Config, error) {
 		return n
 	}
 
+	bounded := func(name string, fallback, low, high int) int {
+		raw := strings.TrimSpace(getenv(name))
+		if raw == "" {
+			return fallback
+		}
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < low || n > high {
+			errs = append(errs, fmt.Errorf("%s must be a whole number from %d to %d, got %q", name, low, high, raw))
+			return fallback
+		}
+		return n
+	}
+
 	cfg := Config{
 		Port:               optional("PORT", "8080"),
 		DBPath:             optional("DB_PATH", "chain.db"),
@@ -76,6 +91,8 @@ func load(getenv func(string) string) (Config, error) {
 		CharityURL:         required("CHARITY_URL"),
 		PledgerName:        required("PLEDGER_NAME"),
 		RateLimitPerHour:   positive("RATE_LIMIT_PER_HOUR", 3),
+		GlobalPerMinute:    positive("GLOBAL_PER_MINUTE", 10),
+		PowBits:            bounded("POW_BITS", 18, 0, 32),
 	}
 
 	if _, err := strconv.Atoi(cfg.Port); err != nil {

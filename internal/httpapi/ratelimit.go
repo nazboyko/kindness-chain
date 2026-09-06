@@ -30,6 +30,16 @@ func NewLimiter(limit int, window time.Duration) *Limiter {
 // is not, it also says how long until the oldest action leaves the
 // window and one more is allowed.
 func (l *Limiter) Allow(key string) (bool, time.Duration) {
+	return l.check(key, true)
+}
+
+// Peek is Allow without recording anything: it answers whether the next
+// action would be allowed.
+func (l *Limiter) Peek(key string) (bool, time.Duration) {
+	return l.check(key, false)
+}
+
+func (l *Limiter) check(key string, record bool) (bool, time.Duration) {
 	now := l.now()
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -49,7 +59,10 @@ func (l *Limiter) Allow(key string) (bool, time.Duration) {
 		l.hits[key] = recent
 		return false, recent[0].Add(l.window).Sub(now)
 	}
-	l.hits[key] = append(recent, now)
+	if record {
+		recent = append(recent, now)
+	}
+	l.hits[key] = recent
 	return true, 0
 }
 

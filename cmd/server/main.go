@@ -81,6 +81,8 @@ func run() error {
 	api := httpapi.New(httpapi.Config{
 		Cluster:          cfg.SolanaCluster,
 		RateLimitPerHour: cfg.RateLimitPerHour,
+		GlobalPerMinute:  cfg.GlobalPerMinute,
+		PowBits:          cfg.PowBits,
 	}, service, ledger, hub, dist)
 
 	srv := &http.Server{

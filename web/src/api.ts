@@ -51,11 +51,24 @@ export interface Page {
   hasMore: boolean;
 }
 
+export interface Challenge {
+  seed: string;
+  difficulty: number;
+  expires: string;
+}
+
+// Seal is the answer to a challenge: the seed and the nonce found for it.
+export interface Seal {
+  seed: string;
+  nonce: string;
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
     readonly retryAfterSeconds?: number,
+    readonly reason?: string,
   ) {
     super(message);
   }
@@ -68,14 +81,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!res.ok) {
     let message = `The server answered ${res.status}.`;
     let retryAfterSeconds: number | undefined;
+    let reason: string | undefined;
     try {
       const body = await res.json();
       if (typeof body.error === "string") message = body.error;
       if (typeof body.retryAfterSeconds === "number") retryAfterSeconds = body.retryAfterSeconds;
+      if (typeof body.reason === "string") reason = body.reason;
     } catch {
       // no JSON body, the status message stands
     }
-    throw new ApiError(res.status, message, retryAfterSeconds);
+    throw new ApiError(res.status, message, retryAfterSeconds, reason);
   }
   return res.json() as Promise<T>;
 }
@@ -85,7 +100,8 @@ export const api = {
   links: (before?: number, limit = 50) =>
     request<Page>(`/api/links?limit=${limit}${before ? `&before=${before}` : ""}`),
   link: (n: number) => request<Link>(`/api/links/${n}`),
-  add: (act: string, by: string, website: string) =>
-    request<Link>("/api/links", { method: "POST", body: JSON.stringify({ act, by, website }) }),
+  challenge: () => request<Challenge>("/api/challenge"),
+  add: (act: string, by: string, website: string, seal?: Seal) =>
+    request<Link>("/api/links", { method: "POST", body: JSON.stringify({ act, by, website, ...seal }) }),
   verify: (n: number) => request<Verification>(`/api/verify/${n}`),
 };

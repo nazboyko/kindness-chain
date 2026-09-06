@@ -14,7 +14,7 @@ export function Footer() {
         <a href={copy.repoURL} className={external} target="_blank" rel="noopener noreferrer">
           Source on GitHub
         </a>{" "}
-        · Runs on Solana devnet — a proof-of-concept ledger, not a mainnet contract.
+        · Runs on Solana devnet. A proof-of-concept ledger, not a mainnet contract.
       </p>
     </footer>
   );

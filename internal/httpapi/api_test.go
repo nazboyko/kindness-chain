@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -29,6 +30,11 @@ type fixture struct {
 
 func setup(t *testing.T, limit int) *fixture {
 	t.Helper()
+	return setupWith(t, Config{Cluster: "devnet", RateLimitPerHour: limit, GlobalPerMinute: 100})
+}
+
+func setupWith(t *testing.T, cfg Config) *fixture {
+	t.Helper()
 	st, err := store.Open(filepath.Join(t.TempDir(), "api.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -44,7 +50,7 @@ func setup(t *testing.T, limit int) *fixture {
 		PledgerName:  "Nazar",
 	}, st, ledger, hub)
 	dist := fstest.MapFS{"index.html": {Data: []byte("<html>app</html>")}}
-	api := New(Config{Cluster: "devnet", RateLimitPerHour: limit}, service, ledger, hub, dist)
+	api := New(cfg, service, ledger, hub, dist)
 	api.log = log.New(io.Discard, "", 0)
 	return &fixture{api: api, service: service, ledger: ledger, hub: hub, handler: api.Handler()}
 }
@@ -141,18 +147,18 @@ func TestHoneypotWritesNothing(t *testing.T) {
 func TestRateLimit(t *testing.T) {
 	f := setup(t, 2)
 	for i := range 2 {
-		if rec, _ := f.do(t, "POST", "/api/links", `{"act":"I carried groceries for a neighbour"}`); rec.Code != 202 {
+		if rec, _ := f.do(t, "POST", "/api/links", `{"act":"I carried groceries for a neighbour number `+strconv.Itoa(i)+`"}`); rec.Code != 202 {
 			t.Fatalf("link %d: status %d", i+1, rec.Code)
 		}
 	}
-	rec, body := f.do(t, "POST", "/api/links", `{"act":"I carried groceries for a neighbour"}`)
+	rec, body := f.do(t, "POST", "/api/links", `{"act":"I carried groceries for a neighbour again"}`)
 	if rec.Code != http.StatusTooManyRequests {
 		t.Fatalf("third link: status %d", rec.Code)
 	}
 	if rec.Header().Get("Retry-After") == "" {
 		t.Error("no Retry-After header")
 	}
-	if msg, _ := body["error"].(string); !strings.Contains(msg, "You've added 2 links this hour. Come back in 60 minutes") {
+	if msg, _ := body["error"].(string); !strings.Contains(msg, "You've added 2 links this hour. Come back in 60 minutes. Kindness keeps.") {
 		t.Errorf("message = %q", msg)
 	}
 	// a bad sentence is refused on its own merits even when over the limit
@@ -311,5 +317,69 @@ func TestEventStream(t *testing.T) {
 	f.hub.LinkChanged(chain.Link{N: 5, Act: "hello there world", Status: store.StatusConfirmed, Signature: "sig5", CreatedAt: time.Now()})
 	if event, data := readEvent(); event != "link" || !strings.Contains(data, `"n":5`) || !strings.Contains(data, "explorer.solana.com/tx/sig5?cluster=devnet") {
 		t.Fatalf("second event = %s %s", event, data)
+	}
+}
+
+func TestProofOfWork(t *testing.T) {
+	f := setupWith(t, Config{Cluster: "devnet", RateLimitPerHour: 10, GlobalPerMinute: 100, PowBits: 8})
+	act := "I carried groceries for a neighbour"
+
+	rec, body := f.do(t, "POST", "/api/links", `{"act":"`+act+`"}`)
+	if rec.Code != 422 || body["reason"] != "challenge" {
+		t.Fatalf("without a seal: %d %v", rec.Code, body)
+	}
+
+	rec, challenge := f.do(t, "GET", "/api/challenge", "")
+	if rec.Code != 200 || challenge["difficulty"] != float64(8) || rec.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("challenge: %d %v", rec.Code, challenge)
+	}
+	seed := challenge["seed"].(string)
+	nonce := solve(seed, act, 8)
+
+	rec, body = f.do(t, "POST", "/api/links", `{"act":"`+act+`","seed":"`+seed+`","nonce":"`+nonce+`"}`)
+	if rec.Code != 202 {
+		t.Fatalf("with a seal: %d %v", rec.Code, body)
+	}
+	rec, body = f.do(t, "POST", "/api/links", `{"act":"another kind sentence here","seed":"`+seed+`","nonce":"`+nonce+`"}`)
+	if rec.Code != 422 || body["reason"] != "challenge" {
+		t.Fatalf("reused seal: %d %v", rec.Code, body)
+	}
+}
+
+func TestProofOfWorkOff(t *testing.T) {
+	f := setup(t, 10)
+	rec, body := f.do(t, "GET", "/api/challenge", "")
+	if rec.Code != 200 || body["difficulty"] != float64(0) {
+		t.Fatalf("challenge with proof of work off: %d %v", rec.Code, body)
+	}
+}
+
+func TestDuplicateSentence(t *testing.T) {
+	f := setup(t, 10)
+	if rec, _ := f.do(t, "POST", "/api/links", `{"act":"I called my grandmother today."}`); rec.Code != 202 {
+		t.Fatalf("first: %d", rec.Code)
+	}
+	rec, body := f.do(t, "POST", "/api/links", `{"act":"i called my grandmother, today!"}`)
+	if rec.Code != 422 || body["error"] != chain.MsgDuplicate {
+		t.Fatalf("duplicate: %d %v", rec.Code, body)
+	}
+	// a refused duplicate must not have charged the hourly limit
+	for i := range 9 {
+		if rec, _ := f.do(t, "POST", "/api/links", `{"act":"a different kind sentence number `+strconv.Itoa(i)+`"}`); rec.Code != 202 {
+			t.Fatalf("sentence %d after a duplicate: %d", i, rec.Code)
+		}
+	}
+}
+
+func TestGlobalThrottle(t *testing.T) {
+	f := setupWith(t, Config{Cluster: "devnet", RateLimitPerHour: 100, GlobalPerMinute: 2})
+	for i := range 2 {
+		if rec, _ := f.do(t, "POST", "/api/links", `{"act":"a kind sentence number `+strconv.Itoa(i)+`"}`); rec.Code != 202 {
+			t.Fatalf("link %d: %d", i, rec.Code)
+		}
+	}
+	rec, body := f.do(t, "POST", "/api/links", `{"act":"one kind sentence too many"}`)
+	if rec.Code != 429 || body["error"] != "The chain is busy right now, try again in a minute" || rec.Header().Get("Retry-After") == "" {
+		t.Fatalf("over the global limit: %d %v", rec.Code, body)
 	}
 }
