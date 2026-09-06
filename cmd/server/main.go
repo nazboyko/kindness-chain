@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"log"
 	"net"
@@ -53,6 +52,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	hub := httpapi.NewHub(cfg.SolanaCluster)
 	service := chain.New(chain.Config{
 		PerLinkCents:  cfg.PledgePerLinkCents,
 		CapCents:      cfg.PledgeCapCents,
@@ -60,7 +60,7 @@ func run() error {
 		CharityURL:    cfg.CharityURL,
 		PledgerName:   cfg.PledgerName,
 		SignerAddress: signer,
-	}, st, ledger, chain.NopBroadcaster{})
+	}, st, ledger, hub)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -78,17 +78,18 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("embedded frontend: %w", err)
 	}
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
-		io.WriteString(w, "ok\n")
-	})
-	mux.Handle("/", httpapi.Static(dist))
+	api := httpapi.New(httpapi.Config{
+		Cluster:          cfg.SolanaCluster,
+		RateLimitPerHour: cfg.RateLimitPerHour,
+	}, service, ledger, hub, dist)
 
 	srv := &http.Server{
-		Handler:           mux,
+		Handler:           api.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 		// no WriteTimeout: the event stream stays open as long as a tab does
 	}
+	// open event streams would otherwise hold the shutdown until its timeout
+	srv.RegisterOnShutdown(hub.Close)
 	shutdownDone := make(chan struct{})
 	go func() {
 		defer close(shutdownDone)
