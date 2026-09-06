@@ -95,8 +95,8 @@ func (a *API) handleAdd(w http.ResponseWriter, r *http.Request) {
 		a.refuse(w, err)
 		return
 	}
-	if a.challenges != nil {
-		if err := a.challenges.Redeem(in.Seed, in.Nonce, in.Act); err != nil {
+	if a.pow != nil {
+		if err := a.pow.redeem(in.Seed, in.Nonce, in.Act); err != nil {
 			writeJSON(w, http.StatusUnprocessableEntity, map[string]any{
 				"error":  "This link's seal is missing or expired. Try again.",
 				"reason": "challenge",
@@ -108,12 +108,12 @@ func (a *API) handleAdd(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, "duplicate check", err)
 		return
 	} else if duplicate {
-		writeError(w, http.StatusUnprocessableEntity, chain.MsgDuplicate)
+		a.refuse(w, chain.ErrDuplicate)
 		return
 	}
 
 	ip := clientIP(r)
-	if ok, wait := a.perIP.Peek(ip); !ok {
+	if ok, wait := a.perIP.peek(ip); !ok {
 		minutes := int(math.Ceil(wait.Minutes()))
 		a.tooMany(w, wait, fmt.Sprintf(
 			"You've added %d links this hour. Come back in %d minutes. Kindness keeps.",
@@ -121,12 +121,12 @@ func (a *API) handleAdd(w http.ResponseWriter, r *http.Request) {
 		))
 		return
 	}
-	if ok, wait := a.global.Peek("chain"); !ok {
+	if ok, wait := a.global.peek("chain"); !ok {
 		a.tooMany(w, wait, "The chain is busy right now, try again in a minute")
 		return
 	}
-	a.perIP.Allow(ip)
-	a.global.Allow("chain")
+	a.perIP.allow(ip)
+	a.global.allow("chain")
 
 	link, err := a.chain.Add(r.Context(), in.Act, in.By)
 	if err != nil {
@@ -149,16 +149,16 @@ func (a *API) tooMany(w http.ResponseWriter, wait time.Duration, message string)
 // off it says so with a difficulty of zero, and browsers send nothing.
 func (a *API) handleChallenge(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
-	if a.challenges == nil {
-		writeJSON(w, http.StatusOK, Challenge{Difficulty: 0, Expires: time.Now().Add(challengeTTL)})
+	if a.pow == nil {
+		writeJSON(w, http.StatusOK, challenge{Difficulty: 0, Expires: time.Now().Add(challengeTTL)})
 		return
 	}
-	challenge, err := a.challenges.Issue()
+	issued, err := a.pow.issue()
 	if err != nil {
 		a.serverError(w, "issue challenge", err)
 		return
 	}
-	writeJSON(w, http.StatusOK, challenge)
+	writeJSON(w, http.StatusOK, issued)
 }
 
 // pretendToAccept answers a bot that filled the hidden field the way a

@@ -9,21 +9,21 @@ import (
 // Limits on what a link can hold. They keep every memo well inside one
 // transaction and keep the feed readable.
 const (
-	MinActLength = 10
-	MaxActLength = 200
-	MaxByLength  = 40
+	minActLength = 10
+	maxActLength = 200
+	maxByLength  = 40
 )
 
 // The refusals, worded for the visitor. The frontend repeats the length
 // ones so it can answer before a request is made.
 const (
-	MsgTooShort      = "Write at least 10 characters. One honest sentence is enough."
-	MsgTooLong       = "Keep it to 200 characters. One sentence is enough."
-	MsgNameTooLong   = "Keep your name to 40 characters."
-	MsgNoLinks       = "Links are not allowed here, just the sentence."
-	MsgBlockedWord   = "That word is not welcome here. Try another sentence."
-	MsgTooBigOnChain = "That sentence is too long to fit on-chain in one memo. Try fewer characters."
-	MsgDuplicate     = "This sentence is already in the chain."
+	msgTooShort      = "Write at least 10 characters. One honest sentence is enough."
+	msgTooLong       = "Keep it to 200 characters. One sentence is enough."
+	msgNameTooLong   = "Keep your name to 40 characters."
+	msgNoLinks       = "Links are not allowed here, just the sentence."
+	msgBlockedWord   = "That word is not welcome here. Try another sentence."
+	msgTooBigOnChain = "That sentence is too long to fit on-chain in one memo. Try fewer characters."
+	msgDuplicate     = "This sentence is already in the chain."
 )
 
 // ValidationError explains, in the visitor's words, why a submission
@@ -40,29 +40,33 @@ func refuse(message string) error {
 	return &ValidationError{Message: message}
 }
 
+// ErrDuplicate is the refusal for a sentence the chain already has. The
+// API checks for duplicates itself, before any limit is charged.
+var ErrDuplicate = &ValidationError{Message: msgDuplicate}
+
 // Validate cleans a submission and refuses what the chain should not
 // carry. It returns the cleaned sentence and name.
 func Validate(act, by string) (string, string, error) {
-	act = Normalize(act)
-	by = Normalize(by)
+	act = normalize(act)
+	by = normalize(by)
 	switch {
-	case utf8.RuneCountInString(act) < MinActLength:
-		return "", "", refuse(MsgTooShort)
-	case utf8.RuneCountInString(act) > MaxActLength:
-		return "", "", refuse(MsgTooLong)
-	case utf8.RuneCountInString(by) > MaxByLength:
-		return "", "", refuse(MsgNameTooLong)
+	case utf8.RuneCountInString(act) < minActLength:
+		return "", "", refuse(msgTooShort)
+	case utf8.RuneCountInString(act) > maxActLength:
+		return "", "", refuse(msgTooLong)
+	case utf8.RuneCountInString(by) > maxByLength:
+		return "", "", refuse(msgNameTooLong)
 	case hasLink(act) || hasLink(by):
-		return "", "", refuse(MsgNoLinks)
+		return "", "", refuse(msgNoLinks)
 	case hasBlockedWord(act) || hasBlockedWord(by):
-		return "", "", refuse(MsgBlockedWord)
+		return "", "", refuse(msgBlockedWord)
 	}
 	return act, by, nil
 }
 
-// Normalize trims, collapses runs of whitespace into one space, and
+// normalize trims, collapses runs of whitespace into one space, and
 // drops control and invisible characters.
-func Normalize(s string) string {
+func normalize(s string) string {
 	var b strings.Builder
 	pendingSpace := false
 	for _, r := range s {
@@ -82,13 +86,13 @@ func Normalize(s string) string {
 	return b.String()
 }
 
-// Fingerprint reduces a sentence to what a duplicate check compares:
+// fingerprint reduces a sentence to what a duplicate check compares:
 // lowercase, no punctuation or symbols, single spaces. Two sentences
 // that differ only in those ways are the same sentence.
-func Fingerprint(act string) string {
+func fingerprint(act string) string {
 	var b strings.Builder
 	pendingSpace := false
-	for _, r := range strings.ToLower(Normalize(act)) {
+	for _, r := range strings.ToLower(normalize(act)) {
 		switch {
 		case unicode.IsSpace(r):
 			pendingSpace = true

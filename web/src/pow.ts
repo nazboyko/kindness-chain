@@ -28,7 +28,7 @@ async function solve(seed: string, bits: number, act: string): Promise<number> {
   }
 }
 
-export function leadingZeroBits(bytes: Uint8Array): number {
+function leadingZeroBits(bytes: Uint8Array): number {
   let n = 0;
   for (const b of bytes) {
     if (b === 0) {

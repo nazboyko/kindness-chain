@@ -10,14 +10,14 @@ import (
 	"time"
 )
 
-// Challenges hands out proof-of-work seeds and checks the answers. A
+// challenges hands out proof-of-work seeds and checks the answers. A
 // browser asks for a seed, finds a nonce that makes
 // sha256(seed + nonce + sentence) start with enough zero bits, and sends
 // both with the sentence. That costs a phone a second or two and a
 // script farm the same per link, which is the point. Seeds live in
 // memory, are good for one submission, and expire; a restart forgets
 // them and clients simply ask again.
-type Challenges struct {
+type challenges struct {
 	bits int
 	ttl  time.Duration
 	now  func() time.Time
@@ -27,33 +27,33 @@ type Challenges struct {
 	count  int
 }
 
-// Challenge is what a browser receives.
-type Challenge struct {
+// challenge is what a browser receives.
+type challenge struct {
 	Seed       string    `json:"seed"`
 	Difficulty int       `json:"difficulty"`
 	Expires    time.Time `json:"expires"`
 }
 
 var (
-	// ErrChallengeUnknown covers seeds that were never issued, were
+	// errChallengeUnknown covers seeds that were never issued, were
 	// already spent, or were forgotten by a restart.
-	ErrChallengeUnknown = errors.New("unknown or used challenge")
-	// ErrChallengeExpired means the seed was issued too long ago.
-	ErrChallengeExpired = errors.New("challenge expired")
-	// ErrChallengeWrong means the nonce does not meet the difficulty.
-	ErrChallengeWrong = errors.New("proof of work does not meet the difficulty")
+	errChallengeUnknown = errors.New("unknown or used challenge")
+	// errChallengeExpired means the seed was issued too long ago.
+	errChallengeExpired = errors.New("challenge expired")
+	// errChallengeWrong means the nonce does not meet the difficulty.
+	errChallengeWrong = errors.New("proof of work does not meet the difficulty")
 )
 
-// NewChallenges requires bits leading zero bits and forgets seeds after ttl.
-func NewChallenges(bits int, ttl time.Duration) *Challenges {
-	return &Challenges{bits: bits, ttl: ttl, now: time.Now, issued: map[string]time.Time{}}
+// newChallenges requires bits leading zero bits and forgets seeds after ttl.
+func newChallenges(bits int, ttl time.Duration) *challenges {
+	return &challenges{bits: bits, ttl: ttl, now: time.Now, issued: map[string]time.Time{}}
 }
 
-// Issue makes a fresh seed.
-func (c *Challenges) Issue() (Challenge, error) {
+// issue makes a fresh seed.
+func (c *challenges) issue() (challenge, error) {
 	var raw [16]byte
 	if _, err := rand.Read(raw[:]); err != nil {
-		return Challenge{}, err
+		return challenge{}, err
 	}
 	seed := hex.EncodeToString(raw[:])
 	now := c.now()
@@ -65,29 +65,29 @@ func (c *Challenges) Issue() (Challenge, error) {
 		c.sweep(now)
 	}
 	c.issued[seed] = now
-	return Challenge{Seed: seed, Difficulty: c.bits, Expires: now.Add(c.ttl)}, nil
+	return challenge{Seed: seed, Difficulty: c.bits, Expires: now.Add(c.ttl)}, nil
 }
 
-// Redeem checks an answer. The seed is spent whether or not the answer
+// redeem checks an answer. The seed is spent whether or not the answer
 // is right, so every attempt costs a fresh challenge.
-func (c *Challenges) Redeem(seed, nonce, act string) error {
+func (c *challenges) redeem(seed, nonce, act string) error {
 	c.mu.Lock()
 	issuedAt, ok := c.issued[seed]
 	delete(c.issued, seed)
 	c.mu.Unlock()
 	if !ok {
-		return ErrChallengeUnknown
+		return errChallengeUnknown
 	}
 	if c.now().Sub(issuedAt) > c.ttl {
-		return ErrChallengeExpired
+		return errChallengeExpired
 	}
-	if !Solves(seed, nonce, act, c.bits) {
-		return ErrChallengeWrong
+	if !solves(seed, nonce, act, c.bits) {
+		return errChallengeWrong
 	}
 	return nil
 }
 
-func (c *Challenges) sweep(now time.Time) {
+func (c *challenges) sweep(now time.Time) {
 	for seed, at := range c.issued {
 		if now.Sub(at) > c.ttl {
 			delete(c.issued, seed)
@@ -95,10 +95,9 @@ func (c *Challenges) sweep(now time.Time) {
 	}
 }
 
-// Solves is the check itself, shared with tests and tools: the SHA-256
-// of seed, nonce and sentence, concatenated as text, must start with at
-// least bits zero bits.
-func Solves(seed, nonce, act string, bits int) bool {
+// solves is the check itself: the SHA-256 of seed, nonce and sentence,
+// concatenated as text, must start with at least bits zero bits.
+func solves(seed, nonce, act string, bits int) bool {
 	sum := sha256.Sum256([]byte(seed + nonce + act))
 	return leadingZeroBits(sum[:]) >= bits
 }

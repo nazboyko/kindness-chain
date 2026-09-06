@@ -114,8 +114,8 @@ func TestAddRefusals(t *testing.T) {
 		wantStatus int
 		wantError  string
 	}{
-		{"too short", `{"act":"Hi"}`, 422, chain.MsgTooShort},
-		{"link inside", `{"act":"Give at https://example.com today"}`, 422, chain.MsgNoLinks},
+		{"too short", `{"act":"Hi"}`, 422, "at least 10 characters"},
+		{"link inside", `{"act":"Give at https://example.com today"}`, 422, "Links are not allowed"},
 		{"malformed json", `{"act":`, 400, "send JSON"},
 		{"oversized body", `{"act":"` + strings.Repeat("a", maxBodyBytes) + `"}`, 400, "send JSON"},
 	}
@@ -311,7 +311,7 @@ func TestEventStream(t *testing.T) {
 	if event, data := readEvent(); event != "stats" || !strings.Contains(data, `"capCents":5000`) {
 		t.Fatalf("first event = %s %s", event, data)
 	}
-	for f.hub.Streams() == 0 {
+	for f.hub.open() == 0 {
 		time.Sleep(10 * time.Millisecond)
 	}
 	f.hub.LinkChanged(chain.Link{N: 5, Act: "hello there world", Status: store.StatusConfirmed, Signature: "sig5", CreatedAt: time.Now()})
@@ -360,7 +360,7 @@ func TestDuplicateSentence(t *testing.T) {
 		t.Fatalf("first: %d", rec.Code)
 	}
 	rec, body := f.do(t, "POST", "/api/links", `{"act":"i called my grandmother, today!"}`)
-	if rec.Code != 422 || body["error"] != chain.MsgDuplicate {
+	if rec.Code != 422 || body["error"] != chain.ErrDuplicate.Message {
 		t.Fatalf("duplicate: %d %v", rec.Code, body)
 	}
 	// a refused duplicate must not have charged the hourly limit

@@ -23,8 +23,8 @@ const (
 var (
 	// ErrNotFound is returned for a link number that does not exist.
 	ErrNotFound = errors.New("link not found")
-	// ErrNotPending is returned when a link is marked twice.
-	ErrNotPending = errors.New("link is not pending")
+	// errNotPending is returned when a link is marked twice.
+	errNotPending = errors.New("link is not pending")
 )
 
 // Link is one row: a sentence, who wrote it, and what the chain says
@@ -42,12 +42,12 @@ type Link struct {
 	Error         string
 }
 
-// Counts is how many links are in each state. Confirmed leaves out
-// link #0, which is the pledge itself and does not count toward it.
+// Counts is how many links are on the chain and how many are waiting.
+// Confirmed leaves out link #0, which is the pledge itself and does not
+// count toward it.
 type Counts struct {
 	Confirmed int64
 	Pending   int64
-	Failed    int64
 }
 
 // Store is an open database.

@@ -19,8 +19,8 @@ func TestValidate(t *testing.T) {
 		want error
 	}{
 		{"short memo", []byte(`{"v":1}`), nil},
-		{"exactly at the limit", bytes.Repeat([]byte("a"), MaxMemoBytes), nil},
-		{"one byte over", bytes.Repeat([]byte("a"), MaxMemoBytes+1), ErrMemoTooLarge},
+		{"exactly at the limit", bytes.Repeat([]byte("a"), maxMemoBytes), nil},
+		{"one byte over", bytes.Repeat([]byte("a"), maxMemoBytes+1), ErrMemoTooLarge},
 		{"invalid utf-8", []byte{0xff, 0xfe}, ErrMemoNotUTF8},
 	}
 	for _, tc := range cases {
@@ -87,7 +87,7 @@ func TestFake(t *testing.T) {
 		t.Errorf("Sent() = %v", got)
 	}
 
-	if _, err := fake.SendMemo(ctx, bytes.Repeat([]byte("x"), MaxMemoBytes+1)); !errors.Is(err, ErrMemoTooLarge) {
+	if _, err := fake.SendMemo(ctx, bytes.Repeat([]byte("x"), maxMemoBytes+1)); !errors.Is(err, ErrMemoTooLarge) {
 		t.Errorf("oversize memo error = %v", err)
 	}
 }
@@ -107,6 +107,16 @@ func keypairJSON(t *testing.T) ([]byte, solanago.PrivateKey) {
 		t.Fatal(err)
 	}
 	return out, key
+}
+
+func TestReaderCannotSend(t *testing.T) {
+	reader := NewReader("http://127.0.0.1:9")
+	if reader.Address() != "" {
+		t.Errorf("a reader has an address: %q", reader.Address())
+	}
+	if _, err := reader.SendMemo(context.Background(), []byte("hello")); !errors.Is(err, errNoKey) {
+		t.Errorf("a reader sent a memo: %v", err)
+	}
 }
 
 func TestNewRPC(t *testing.T) {
@@ -135,7 +145,7 @@ func TestRPCRejectsOversizeMemoBeforeSending(t *testing.T) {
 	}
 	// nothing listens on that port, so reaching the network would fail
 	// with a different error than the size check
-	_, err = client.SendMemo(context.Background(), bytes.Repeat([]byte("x"), MaxMemoBytes+1))
+	_, err = client.SendMemo(context.Background(), bytes.Repeat([]byte("x"), maxMemoBytes+1))
 	if !errors.Is(err, ErrMemoTooLarge) {
 		t.Errorf("error = %v, want ErrMemoTooLarge", err)
 	}

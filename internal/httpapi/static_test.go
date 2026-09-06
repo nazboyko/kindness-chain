@@ -13,7 +13,7 @@ func TestStatic(t *testing.T) {
 		"index.html":         {Data: []byte("<html>index</html>")},
 		"assets/app-1a2b.js": {Data: []byte("console.log(1)")},
 	}
-	handler := Static(dist)
+	handler := static(dist)
 
 	cases := []struct {
 		name       string
@@ -47,7 +47,7 @@ func TestStatic(t *testing.T) {
 
 	t.Run("unbuilt frontend explains itself", func(t *testing.T) {
 		rec := httptest.NewRecorder()
-		Static(fstest.MapFS{}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+		static(fstest.MapFS{}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 		if rec.Code != http.StatusServiceUnavailable {
 			t.Fatalf("status = %d, want 503", rec.Code)
 		}

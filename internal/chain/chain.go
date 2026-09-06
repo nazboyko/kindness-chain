@@ -51,11 +51,11 @@ type Broadcaster interface {
 	StatsChanged(stats Stats)
 }
 
-// NopBroadcaster tells nobody.
-type NopBroadcaster struct{}
+// nopBroadcaster tells nobody.
+type nopBroadcaster struct{}
 
-func (NopBroadcaster) LinkChanged(Link)   {}
-func (NopBroadcaster) StatsChanged(Stats) {}
+func (nopBroadcaster) LinkChanged(Link)   {}
+func (nopBroadcaster) StatsChanged(Stats) {}
 
 // ErrBusy is returned when too many links are already waiting.
 var ErrBusy = errors.New("too many links are waiting for the chain, try again in a minute")
@@ -84,7 +84,7 @@ type Service struct {
 // New wires a service. Call Start before Run and before serving.
 func New(cfg Config, st *store.Store, ledger solana.Client, events Broadcaster) *Service {
 	if events == nil {
-		events = NopBroadcaster{}
+		events = nopBroadcaster{}
 	}
 	return &Service{
 		cfg:           cfg,
@@ -101,8 +101,8 @@ func New(cfg Config, st *store.Store, ledger solana.Client, events Broadcaster) 
 // Start writes the pledge as link #0 when the store is empty and queues
 // every link an earlier run left pending, so a restart loses nothing.
 func (s *Service) Start(ctx context.Context) error {
-	pledge := GenesisText(s.cfg)
-	wrote, err := s.store.InsertGenesis(ctx, pledge, s.cfg.PledgerName, Fingerprint(pledge), now())
+	pledge := genesisText(s.cfg)
+	wrote, err := s.store.InsertGenesis(ctx, pledge, s.cfg.PledgerName, fingerprint(pledge), now())
 	if err != nil {
 		return err
 	}
@@ -115,7 +115,7 @@ func (s *Service) Start(ctx context.Context) error {
 		return err
 	}
 	for _, link := range older {
-		if err := s.store.SetFingerprint(ctx, link.N, Fingerprint(link.Act)); err != nil {
+		if err := s.store.SetFingerprint(ctx, link.N, fingerprint(link.Act)); err != nil {
 			return err
 		}
 	}
@@ -156,12 +156,12 @@ func (s *Service) Add(ctx context.Context, act, by string) (Link, error) {
 		return Link{}, err
 	}
 	if duplicate {
-		return Link{}, refuse(MsgDuplicate)
+		return Link{}, ErrDuplicate
 	}
 	if len(s.queue) >= cap(s.queue) {
 		return Link{}, ErrBusy
 	}
-	n, err := s.store.Insert(ctx, act, by, Fingerprint(act), createdAt)
+	n, err := s.store.Insert(ctx, act, by, fingerprint(act), createdAt)
 	if err != nil {
 		return Link{}, fmt.Errorf("store link: %w", err)
 	}
@@ -178,7 +178,7 @@ func (s *Service) Add(ctx context.Context, act, by string) (Link, error) {
 // Duplicate reports whether the same sentence, give or take punctuation
 // and case, was added within the last day.
 func (s *Service) Duplicate(ctx context.Context, act string) (bool, error) {
-	seen, err := s.store.SeenSince(ctx, Fingerprint(act), now().Add(-duplicateWindow))
+	seen, err := s.store.SeenSince(ctx, fingerprint(act), now().Add(-duplicateWindow))
 	if err != nil {
 		return false, fmt.Errorf("duplicate check: %w", err)
 	}

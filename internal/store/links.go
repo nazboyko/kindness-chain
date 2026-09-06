@@ -110,7 +110,7 @@ func outcome(res sql.Result, err error, what string) error {
 		return fmt.Errorf("%s: %w", what, err)
 	}
 	if rows == 0 {
-		return ErrNotPending
+		return errNotPending
 	}
 	return nil
 }
@@ -191,15 +191,14 @@ func (s *Store) SetFingerprint(ctx context.Context, n int64, fingerprint string)
 	return nil
 }
 
-// Counts tallies links by state.
+// Counts tallies the links that count and the links that wait.
 func (s *Store) Counts(ctx context.Context) (Counts, error) {
 	var c Counts
 	err := s.db.QueryRowContext(ctx, `
 		SELECT
 			COUNT(CASE WHEN status = ? AND n > 0 THEN 1 END),
-			COUNT(CASE WHEN status = ? THEN 1 END),
 			COUNT(CASE WHEN status = ? THEN 1 END)
-		FROM links`, StatusConfirmed, StatusPending, StatusFailed).Scan(&c.Confirmed, &c.Pending, &c.Failed)
+		FROM links`, StatusConfirmed, StatusPending).Scan(&c.Confirmed, &c.Pending)
 	if err != nil {
 		return Counts{}, fmt.Errorf("count links: %w", err)
 	}

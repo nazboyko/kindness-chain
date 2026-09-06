@@ -51,8 +51,8 @@ func (h *Hub) Close() {
 	h.once.Do(func() { close(h.closing) })
 }
 
-// Streams is how many browsers are listening.
-func (h *Hub) Streams() int {
+// open is how many browsers are listening.
+func (h *Hub) open() int {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return len(h.streams)

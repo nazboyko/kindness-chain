@@ -94,7 +94,7 @@ func TestLinksAreConfirmedInOrderAndChained(t *testing.T) {
 	if genesis.N != 0 || genesis.Status != store.StatusConfirmed || genesis.PrevSignature != GenesisPrev {
 		t.Fatalf("genesis = %+v", genesis)
 	}
-	if genesis.Act != GenesisText(testConfig) || genesis.By != "Nazar" {
+	if genesis.Act != genesisText(testConfig) || genesis.By != "Nazar" {
 		t.Errorf("genesis text = %q by %q", genesis.Act, genesis.By)
 	}
 
@@ -150,7 +150,7 @@ func TestRestartPicksUpPendingLinks(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, act := range []string{"first pending sentence", "second pending sentence"} {
-		if _, err := st.Insert(ctx, act, "", Fingerprint(act), now()); err != nil {
+		if _, err := st.Insert(ctx, act, "", fingerprint(act), now()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -239,8 +239,8 @@ func TestAddRefusesBadInput(t *testing.T) {
 	svc, _ := newService(t, openStore(t), solana.NewFake())
 	_, err := svc.Add(context.Background(), "too short", "")
 	var verr *ValidationError
-	if !errors.As(err, &verr) || verr.Message != MsgTooShort {
-		t.Errorf("error = %v, want %q", err, MsgTooShort)
+	if !errors.As(err, &verr) || verr.Message != msgTooShort {
+		t.Errorf("error = %v, want %q", err, msgTooShort)
 	}
 }
 
@@ -254,8 +254,8 @@ func TestDuplicateSentencesAreRefusedForADay(t *testing.T) {
 	}
 	_, err := svc.Add(ctx, "  i called MY grandmother, today ", "")
 	var verr *ValidationError
-	if !errors.As(err, &verr) || verr.Message != MsgDuplicate {
-		t.Fatalf("second copy: %v, want %q", err, MsgDuplicate)
+	if !errors.As(err, &verr) || verr.Message != ErrDuplicate.Message {
+		t.Fatalf("second copy: %v, want %q", err, ErrDuplicate.Message)
 	}
 	if _, err := svc.Add(ctx, "I called my grandmother yesterday.", ""); err != nil {
 		t.Errorf("a different sentence was refused: %v", err)
@@ -263,7 +263,7 @@ func TestDuplicateSentencesAreRefusedForADay(t *testing.T) {
 
 	// the same sentence from two days ago no longer counts
 	old := "I watered the plants for a travelling friend."
-	if _, err := st.Insert(ctx, old, "", Fingerprint(old), now().Add(-48*time.Hour)); err != nil {
+	if _, err := st.Insert(ctx, old, "", fingerprint(old), now().Add(-48*time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := svc.Add(ctx, old, ""); err != nil {

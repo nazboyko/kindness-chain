@@ -11,7 +11,7 @@ var when = time.Date(2026, 9, 6, 14, 3, 11, 0, time.UTC)
 
 func TestEncodeMemo(t *testing.T) {
 	link := Link{N: 347, Act: "I <3 my neighbours & their dog", By: "Olena", CreatedAt: when}
-	got, err := EncodeMemo(link, "5abc")
+	got, err := encodeMemo(link, "5abc")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -20,7 +20,7 @@ func TestEncodeMemo(t *testing.T) {
 		t.Errorf("memo =\n%s\nwant\n%s", got, want)
 	}
 
-	first, err := EncodeMemo(Link{N: 0, Act: "the pledge", By: "Nazar", CreatedAt: when}, "")
+	first, err := encodeMemo(Link{N: 0, Act: "the pledge", By: "Nazar", CreatedAt: when}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,13 +41,13 @@ func TestEncodeMemo(t *testing.T) {
 }
 
 func TestFitsOnChain(t *testing.T) {
-	if err := fitsOnChain(strings.Repeat("a", MaxActLength), strings.Repeat("b", MaxByLength), when); err != nil {
+	if err := fitsOnChain(strings.Repeat("a", maxActLength), strings.Repeat("b", maxByLength), when); err != nil {
 		t.Errorf("the longest plain sentence was refused: %v", err)
 	}
-	err := fitsOnChain(strings.Repeat("字", MaxActLength), "", when)
+	err := fitsOnChain(strings.Repeat("字", maxActLength), "", when)
 	var verr *ValidationError
-	if !errors.As(err, &verr) || verr.Message != MsgTooBigOnChain {
-		t.Errorf("wide text error = %v, want %q", err, MsgTooBigOnChain)
+	if !errors.As(err, &verr) || verr.Message != msgTooBigOnChain {
+		t.Errorf("wide text error = %v, want %q", err, msgTooBigOnChain)
 	}
 }
 
@@ -60,7 +60,7 @@ func TestGenesisText(t *testing.T) {
 		PledgerName:  "Nazar",
 	}
 	want := "I, Nazar, pledge $0.10 for every link added to this chain, up to $50, to the International Institute of Minnesota (iimn.org). Count the links on-chain to hold me to it."
-	if got := GenesisText(cfg); got != want {
+	if got := genesisText(cfg); got != want {
 		t.Errorf("GenesisText =\n%s\nwant\n%s", got, want)
 	}
 }

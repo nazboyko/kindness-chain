@@ -8,10 +8,10 @@ import (
 	"time"
 )
 
-// Limiter allows a number of actions per key inside a sliding window.
+// limiter allows a number of actions per key inside a sliding window.
 // It lives in memory only: nothing about an address is ever written
 // down, and a restart forgets everything.
-type Limiter struct {
+type limiter struct {
 	limit  int
 	window time.Duration
 	now    func() time.Time
@@ -21,25 +21,25 @@ type Limiter struct {
 	calls int
 }
 
-// NewLimiter allows limit actions per key per window.
-func NewLimiter(limit int, window time.Duration) *Limiter {
-	return &Limiter{limit: limit, window: window, now: time.Now, hits: map[string][]time.Time{}}
+// newLimiter allows limit actions per key per window.
+func newLimiter(limit int, window time.Duration) *limiter {
+	return &limiter{limit: limit, window: window, now: time.Now, hits: map[string][]time.Time{}}
 }
 
-// Allow records an action for key when it is within the limit. When it
+// allow records an action for key when it is within the limit. When it
 // is not, it also says how long until the oldest action leaves the
 // window and one more is allowed.
-func (l *Limiter) Allow(key string) (bool, time.Duration) {
+func (l *limiter) allow(key string) (bool, time.Duration) {
 	return l.check(key, true)
 }
 
-// Peek is Allow without recording anything: it answers whether the next
+// peek is allow without recording anything: it answers whether the next
 // action would be allowed.
-func (l *Limiter) Peek(key string) (bool, time.Duration) {
+func (l *limiter) peek(key string) (bool, time.Duration) {
 	return l.check(key, false)
 }
 
-func (l *Limiter) check(key string, record bool) (bool, time.Duration) {
+func (l *limiter) check(key string, record bool) (bool, time.Duration) {
 	now := l.now()
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -68,7 +68,7 @@ func (l *Limiter) check(key string, record bool) (bool, time.Duration) {
 
 // sweep forgets keys with nothing inside the window, so the map does
 // not grow with every address that ever visited.
-func (l *Limiter) sweep(now time.Time) {
+func (l *limiter) sweep(now time.Time) {
 	for key, times := range l.hits {
 		if len(times) == 0 || now.Sub(times[len(times)-1]) >= l.window {
 			delete(l.hits, key)

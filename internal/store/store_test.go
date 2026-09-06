@@ -73,8 +73,8 @@ func TestStatusTransitions(t *testing.T) {
 	if err := s.MarkConfirmed(ctx, 1, "sig1", "genesis", `{"n":1}`, day); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.MarkConfirmed(ctx, 1, "sig1", "genesis", `{"n":1}`, day); !errors.Is(err, ErrNotPending) {
-		t.Errorf("confirming twice = %v, want ErrNotPending", err)
+	if err := s.MarkConfirmed(ctx, 1, "sig1", "genesis", `{"n":1}`, day); !errors.Is(err, errNotPending) {
+		t.Errorf("confirming twice = %v, want errNotPending", err)
 	}
 	if err := s.MarkFailed(ctx, 2, "rejected"); err != nil {
 		t.Fatal(err)
@@ -89,7 +89,7 @@ func TestStatusTransitions(t *testing.T) {
 		t.Errorf("pending = %v err=%v", pending, err)
 	}
 	counts, err := s.Counts(ctx)
-	if err != nil || counts != (Counts{Confirmed: 1, Pending: 1, Failed: 1}) {
+	if err != nil || counts != (Counts{Confirmed: 1, Pending: 1}) {
 		t.Errorf("counts = %+v err=%v", counts, err)
 	}
 	failed, _ := s.Get(ctx, 2)

@@ -28,9 +28,9 @@ const (
 	GenesisPrev = "genesis"
 )
 
-// EncodeMemo renders the memo for a link that follows prev. An empty
+// encodeMemo renders the memo for a link that follows prev. An empty
 // prev means the link is the first on the chain.
-func EncodeMemo(link Link, prev string) ([]byte, error) {
+func encodeMemo(link Link, prev string) ([]byte, error) {
 	if prev == "" {
 		prev = GenesisPrev
 	}
@@ -70,19 +70,19 @@ func DecodeMemo(data []byte) (Memo, error) {
 func fitsOnChain(act, by string, createdAt time.Time) error {
 	const longestSignature = 88 // base58 of 64 bytes
 	widest := Link{N: 1 << 40, Act: act, By: by, CreatedAt: createdAt}
-	memo, err := EncodeMemo(widest, strings.Repeat("1", longestSignature))
+	memo, err := encodeMemo(widest, strings.Repeat("1", longestSignature))
 	if err != nil {
 		return err
 	}
 	if err := solana.Validate(memo); err != nil {
-		return refuse(MsgTooBigOnChain)
+		return refuse(msgTooBigOnChain)
 	}
 	return nil
 }
 
-// GenesisText is the pledge, worded from the configuration, exactly as
+// genesisText is the pledge, worded from the configuration, exactly as
 // it goes on the chain as link #0.
-func GenesisText(cfg Config) string {
+func genesisText(cfg Config) string {
 	return fmt.Sprintf(
 		"I, %s, pledge %s for every link added to this chain, up to %s, to the %s (%s). Count the links on-chain to hold me to it.",
 		cfg.PledgerName, Money(cfg.PerLinkCents), Money(cfg.CapCents), cfg.CharityName, hostOf(cfg.CharityURL),

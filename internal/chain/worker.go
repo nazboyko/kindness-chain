@@ -47,7 +47,7 @@ func (s *Service) process(ctx context.Context, n int64) {
 		s.log.Printf("link %d: %v", n, err)
 		return
 	}
-	memo, err := EncodeMemo(link, head.Signature)
+	memo, err := encodeMemo(link, head.Signature)
 	if err != nil {
 		s.fail(work, link, err)
 		return

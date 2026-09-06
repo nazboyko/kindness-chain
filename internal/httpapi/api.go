@@ -35,15 +35,15 @@ const challengeTTL = 10 * time.Minute
 
 // API holds the handlers and what they depend on.
 type API struct {
-	cfg        Config
-	chain      Chain
-	ledger     solana.Client
-	hub        *Hub
-	perIP      *Limiter
-	global     *Limiter
-	challenges *Challenges // nil when proof of work is off
-	dist       fs.FS
-	log        *log.Logger
+	cfg    Config
+	chain  Chain
+	ledger solana.Client
+	hub    *Hub
+	perIP  *limiter
+	global *limiter
+	pow    *challenges // nil when proof of work is off
+	dist   fs.FS
+	log    *log.Logger
 }
 
 // New wires the API. The hub is created separately because the chain
@@ -54,13 +54,13 @@ func New(cfg Config, service Chain, ledger solana.Client, hub *Hub, dist fs.FS) 
 		chain:  service,
 		ledger: ledger,
 		hub:    hub,
-		perIP:  NewLimiter(cfg.RateLimitPerHour, time.Hour),
-		global: NewLimiter(cfg.GlobalPerMinute, time.Minute),
+		perIP:  newLimiter(cfg.RateLimitPerHour, time.Hour),
+		global: newLimiter(cfg.GlobalPerMinute, time.Minute),
 		dist:   dist,
 		log:    log.Default(),
 	}
 	if cfg.PowBits > 0 {
-		api.challenges = NewChallenges(cfg.PowBits, challengeTTL)
+		api.pow = newChallenges(cfg.PowBits, challengeTTL)
 	}
 	return api
 }
@@ -83,6 +83,6 @@ func (a *API) Handler() http.Handler {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.Write([]byte("ok\n"))
 	})
-	mux.Handle("/", Static(a.dist))
+	mux.Handle("/", static(a.dist))
 	return a.logRequests(secureHeaders(mux))
 }

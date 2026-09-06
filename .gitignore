@@ -11,4 +11,3 @@ web/dist/*
 
 # local environment, never committed
 .env
-.DS_Store

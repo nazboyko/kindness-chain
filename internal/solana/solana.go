@@ -13,9 +13,9 @@ import (
 	"unicode/utf8"
 )
 
-// MaxMemoBytes is the largest memo the SPL Memo program takes in one
+// maxMemoBytes is the largest memo the SPL Memo program takes in one
 // instruction, per its documentation.
-const MaxMemoBytes = 566
+const maxMemoBytes = 566
 
 var (
 	// ErrMemoTooLarge is returned before anything is sent when a memo
@@ -29,10 +29,10 @@ var (
 	// ErrRejected means the cluster ran the transaction and refused it.
 	// Sending the same memo again would only be refused again.
 	ErrRejected = errors.New("transaction rejected on-chain")
-	// ErrExpired means the transaction was never seen before its
+	// errExpired means the transaction was never seen before its
 	// blockhash stopped being valid. It can never land, so a retry with
 	// a fresh blockhash is safe.
-	ErrExpired = errors.New("transaction expired")
+	errExpired = errors.New("transaction expired")
 )
 
 // Client is the chain as the rest of the server sees it.
@@ -46,8 +46,8 @@ type Client interface {
 
 // Validate is the check every client runs before sending.
 func Validate(memo []byte) error {
-	if len(memo) > MaxMemoBytes {
-		return fmt.Errorf("%w: %d bytes, the limit is %d", ErrMemoTooLarge, len(memo), MaxMemoBytes)
+	if len(memo) > maxMemoBytes {
+		return fmt.Errorf("%w: %d bytes, the limit is %d", ErrMemoTooLarge, len(memo), maxMemoBytes)
 	}
 	if !utf8.Valid(memo) {
 		return ErrMemoNotUTF8

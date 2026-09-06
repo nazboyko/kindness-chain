@@ -8,28 +8,28 @@ import (
 
 func TestLimiter(t *testing.T) {
 	now := time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC)
-	l := NewLimiter(3, time.Hour)
+	l := newLimiter(3, time.Hour)
 	l.now = func() time.Time { return now }
 
 	for i := range 3 {
-		if ok, _ := l.Allow("a"); !ok {
+		if ok, _ := l.allow("a"); !ok {
 			t.Fatalf("action %d was refused", i+1)
 		}
 	}
-	ok, wait := l.Allow("a")
+	ok, wait := l.allow("a")
 	if ok || wait != time.Hour {
 		t.Fatalf("fourth action: ok=%v wait=%v, want refused for 1h", ok, wait)
 	}
-	if ok, _ := l.Allow("b"); !ok {
+	if ok, _ := l.allow("b"); !ok {
 		t.Fatal("another key was refused")
 	}
 
 	now = now.Add(30 * time.Minute)
-	if ok, wait := l.Allow("a"); ok || wait != 30*time.Minute {
+	if ok, wait := l.allow("a"); ok || wait != 30*time.Minute {
 		t.Fatalf("after 30m: ok=%v wait=%v", ok, wait)
 	}
 	now = now.Add(31 * time.Minute)
-	if ok, _ := l.Allow("a"); !ok {
+	if ok, _ := l.allow("a"); !ok {
 		t.Fatal("still refused after the window passed")
 	}
 }

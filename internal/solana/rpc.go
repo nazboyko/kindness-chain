@@ -28,13 +28,28 @@ func NewRPC(url string, keypairJSON []byte) (*RPC, error) {
 	return &RPC{node: rpc.New(url), key: key, timeout: 90 * time.Second}, nil
 }
 
-// Address is the base58 public key that signs and pays for every memo.
+// NewReader prepares a client that can only read. It needs no key: the
+// chain is public, and anyone can walk it.
+func NewReader(url string) *RPC {
+	return &RPC{node: rpc.New(url), timeout: 90 * time.Second}
+}
+
+var errNoKey = errors.New("this client has no signing key")
+
+// Address is the base58 public key that signs and pays for every memo,
+// or empty for a reader.
 func (c *RPC) Address() string {
+	if c.key == nil {
+		return ""
+	}
 	return c.key.PublicKey().String()
 }
 
 // Balance is the signer's balance in lamports.
 func (c *RPC) Balance(ctx context.Context) (uint64, error) {
+	if c.key == nil {
+		return 0, errNoKey
+	}
 	out, err := c.node.GetBalance(ctx, c.key.PublicKey(), rpc.CommitmentConfirmed)
 	if err != nil {
 		return 0, fmt.Errorf("get balance: %w", err)
@@ -45,6 +60,9 @@ func (c *RPC) Balance(ctx context.Context) (uint64, error) {
 // SendMemo builds a transaction with a single memo instruction, signs
 // it, sends it and waits for confirmation.
 func (c *RPC) SendMemo(ctx context.Context, memo []byte) (string, error) {
+	if c.key == nil {
+		return "", errNoKey
+	}
 	if err := Validate(memo); err != nil {
 		return "", err
 	}
@@ -115,7 +133,7 @@ func (c *RPC) waitConfirmed(ctx context.Context, sig solanago.Signature, lastVal
 		if !seen {
 			height, err := c.node.GetBlockHeight(ctx, rpc.CommitmentConfirmed)
 			if err == nil && height > lastValidHeight {
-				return fmt.Errorf("%w: %s", ErrExpired, sig)
+				return fmt.Errorf("%w: %s", errExpired, sig)
 			}
 		}
 		select {

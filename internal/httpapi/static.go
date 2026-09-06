@@ -6,11 +6,11 @@ import (
 	"strings"
 )
 
-// Static serves the embedded frontend. Real files are served as they
+// static serves the embedded frontend. Real files are served as they
 // are. A navigation request for a path that is not a file gets
 // index.html, so the client can read ?link=n and own its own routes. A
 // missing asset stays a 404 rather than turning into HTML with a 200.
-func Static(dist fs.FS) http.Handler {
+func static(dist fs.FS) http.Handler {
 	files := http.FileServerFS(dist)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		name := strings.Trim(r.URL.Path, "/")
