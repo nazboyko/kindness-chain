@@ -1,1 +1,80 @@
 @import "tailwindcss";
+@import "@fontsource-variable/alegreya";
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+
+/*
+ * The page is a ledger sheet. Paper is the pale green that accounting
+ * ledger paper was printed on, slips are the white documents that sit
+ * on it, and one ink colour does every job that needs emphasis.
+ */
+@theme {
+  --color-*: initial;
+  --color-paper: #eef3ea;
+  --color-slip: #ffffff;
+  --color-rule: #cbd8c6;
+  --color-ink: #17231c;
+  --color-ink-2: #56665b;
+  --color-accent: #1b6a47;
+  --color-accent-deep: #155a3b;
+  --color-accent-soft: #dcebe0;
+  --color-failed: #9c3a2c;
+  --color-failed-soft: #f3e1dd;
+
+  --font-*: initial;
+  --font-serif: "Alegreya Variable", Georgia, "Times New Roman", serif;
+  --font-sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --animate-tick: tick 420ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  --animate-rise: rise 380ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  --animate-breathe: breathe 1.4s ease-in-out infinite;
+  --animate-fade-tint: fade-tint 3s ease-out forwards;
+
+  @keyframes tick {
+    from { transform: translateY(0.45em); opacity: 0; }
+    to { transform: none; opacity: 1; }
+  }
+  @keyframes rise {
+    from { transform: translateY(-6px); opacity: 0; }
+    to { transform: none; opacity: 1; }
+  }
+  @keyframes breathe {
+    0%, 100% { opacity: 0.35; }
+    50% { opacity: 1; }
+  }
+  @keyframes fade-tint {
+    from { background-color: var(--color-accent-soft); }
+    to { background-color: transparent; }
+  }
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+    background-color: var(--color-paper);
+  }
+  body {
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+  ::selection {
+    background-color: var(--color-accent-soft);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
