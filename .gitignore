@@ -1,0 +1,14 @@
+# Go
+bin/
+*.db
+*.db-wal
+*.db-shm
+
+# Node and Vite
+node_modules/
+web/dist/*
+!web/dist/.gitkeep
+
+# local environment, never committed
+.env
+.DS_Store
