@@ -6,7 +6,9 @@ One sentence from you. One dime from me. Verified on-chain.
 
 Anyone can add one sentence about a kind thing they did or will do today, with no signup and no wallet. Each sentence becomes a link on Solana devnet: an SPL Memo transaction whose JSON carries the signature of the link before it, so the whole chain can be walked and counted by anyone. For every confirmed link I donate $0.10 to the [International Institute of Minnesota](https://iimn.org), up to $50, and the chain is the receipt.
 
-![Twenty seconds on the page: a sentence is typed, added, confirmed on-chain, and opened in Solana Explorer](docs/demo.gif)
+![The page: the headline, the counter and the pledge card](docs/01-hero.png)
+
+![Adding a link to Kindness Chain](docs/demo.gif)
 
 ## Verify the chain yourself
 
@@ -14,17 +16,18 @@ Anyone can add one sentence about a kind thing they did or will do today, with n
 go run ./cmd/walkchain
 ```
 
-That reads the chain head and the pledge terms from the live site, then talks only to a Solana RPC node: it fetches each memo, follows `prev` back to `genesis`, prints one line per link, and adds up what I owe. Pass a signature to start from a different link, `-rpc` to use another node, and `-stats` to point it at another deployment. This is what it printed when the chain had three links:
+That reads the chain head and the pledge terms from the live site, then talks only to a Solana RPC node: it fetches each memo, follows `prev` back to `genesis`, prints one line per link, and adds up what I owe. Pass a signature to start from a different link, `-rpc` to use another node, and `-stats` to point it at another deployment. This is what it printed when the chain had four links (the same text is in `docs/walkchain-output.txt`):
 
 ```
+#4    Nazar                Made a small public promise to refugees in Minnesota, and b…   4Pc7xziBVEKrzs4oZVJWzaPZYKhcvKMgEr2M2okRKbfGk4wKpfk6Gh3ceK31KYsSTK4ncRpX9Ty8Hg7cDo5Cpdbx
 #3    ++                   Walked a stranger at the grocery store to the aisle they co…   NDLUQocnFQJMZBQxZzhWUBetFZ9kBdytKwT2qNqehrMP9TWN9Bo4hyyPsY4VLXC7xMessRRx6JGmG4tEdqEdzzi
 #2    Anonymous            Ran the full deploy check on this chain from the command li…   2FcFZPEWZ3GKYiaVzV4y8bPgN48FyfMTfc3zWcivC9UmsQPgeVpCGmUy1d5ar1HvEfLXciGpX6XKCQ6B89vjZEE1
 #1    Nazar                Spent the last few months helping a friend's small company …   394BGKjQGMSdwHFEVx8dC1fA6e1txYSHCGiFBeD2WEf5umr3YuczZxRVGJHRHChJCYNpQBmNah28bRPzB284KE7w
 #0    Nazar                I, Nazar, pledge $0.10 for every link added to this chain, …   3q5P2tY6kc2Y7tSMUcb9q5WcDZmaZPhv73PDWK2a3mAWBLVYHgvUXHjaFZcTFi99sdiLyVYhxru2h43ErYri5W54
 
-3 links after the pledge, $0.30 owed of $50 at $0.10 per link
+4 links after the pledge, $0.40 owed of $50 at $0.10 per link
 every prev matched: yes, the chain runs back to the pledge at #0
-the site reports 3 confirmed links, the same
+the site reports 4 confirmed links, the same
 ```
 
 The pledge itself is link #0, written on-chain before anything else: [3q5P…5W54](https://explorer.solana.com/tx/3q5P2tY6kc2Y7tSMUcb9q5WcDZmaZPhv73PDWK2a3mAWBLVYHgvUXHjaFZcTFi99sdiLyVYhxru2h43ErYri5W54?cluster=devnet). The chain starts there, with `prev` set to `genesis`. The signer account, [BhYB…ES7](https://explorer.solana.com/address/BhYBDXgFWFRCK8MTamXEuWpxhKgRWJj1i2QeZHrWES7?cluster=devnet), also carries one smoke-test memo from before link #0; everything from #0 on is the chain, and the walk never sees the test memo because nothing points at it.
